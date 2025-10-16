@@ -1,48 +1,34 @@
-import os
+import requests
 import re
-from pathlib import Path
-from typing import List, Tuple
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "typescript-book"
+# Direct link to TypeScript Book main README (raw markdown)
+TS_BOOK_RAW_URL = "https://raw.githubusercontent.com/basarat/typescript-book/master/README.md"
 
-def load_documents() -> List[Tuple[str, str]]:
-    """
-    Load all .md, .markdown, .txt, .html files under data/typescript-book.
-    Returns list of (relative_path, content).
-    """
-    docs = []
-    if not DATA_DIR.exists():
-        return docs
-    for p in DATA_DIR.rglob("*"):
-        if p.is_file() and p.suffix.lower() in {".md", ".markdown", ".txt", ".html"}:
-            text = p.read_text(encoding="utf-8", errors="ignore")
-            docs.append((str(p.relative_to(DATA_DIR.parent)), text))
-    return docs
+def load_documents():
+    try:
+        print("Fetching TypeScript Book content from GitHub...")
+        text = requests.get(TS_BOOK_RAW_URL, timeout=10).text
+        return [("typescript-book/README.md", text)]
+    except Exception as e:
+        print("Error loading remote doc:", e)
+        return []
 
-def find_best_snippet(query: str, docs: List[Tuple[str, str]]) -> Tuple[str, str]:
-    """
-    Very light-weight scoring: token match count. Return (snippet, source_path).
-    """
+def find_best_snippet(query: str, docs):
     q_tokens = [t.lower() for t in re.findall(r"\w+|!!|=>", query)]
-    best_score = 0
-    best_snippet = ""
-    best_source = ""
+    best_score, best_snippet, best_source = 0, "", ""
     for path, text in docs:
         text_low = text.lower()
         score = sum(text_low.count(tok) for tok in q_tokens if tok)
         if score > best_score:
             best_score = score
-            # extract a short snippet around first occurrence of most common token
             for tok in q_tokens:
                 pos = text_low.find(tok)
                 if pos != -1:
-                    start = max(0, pos - 120)
-                    end = min(len(text), pos + 240)
+                    start, end = max(0, pos - 120), min(len(text), pos + 240)
                     snippet = text[start:end].strip()
                     best_snippet = snippet.replace("\n", " ")
                     best_source = path
                     break
     return best_snippet, best_source
 
-# Preload docs (module-level)
 DOCS = load_documents()
